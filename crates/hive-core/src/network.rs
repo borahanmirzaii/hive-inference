@@ -63,13 +63,11 @@ impl VertexNode {
         .await
         .map_err(|_| NetworkError::BindTimeout)??;
 
-        // Tune Vertex for low-latency local swarm coordination
+        // Tune Vertex for swarm coordination with burst traffic
         let mut options = Options::default();
-        options.set_heartbeat_us(500_000); // 500ms Vertex heartbeat (fast gossip)
-        options.set_target_ack_latency_ms(400); // tighten ack target
-        options.set_max_ack_latency_ms(800); // cap ack latency
-        options.set_enable_dynamic_epoch_size(true); // adapt to swarm size changes
-        options.set_transaction_channel_size(4096); // buffer for burst traffic
+        options.set_max_ack_latency_ms(800); // raise from 600ms default for burst tolerance
+        options.set_transaction_channel_size(4096); // 128x default (32) for bid/result bursts
+        options.set_base_min_event_interval_us(10_000); // 10ms min between events (default 50ms)
 
         let engine = Engine::start(
             &context,
@@ -95,11 +93,9 @@ impl VertexNode {
         Ok(())
     }
 
-    /// Receive next consensus-ordered HiveMessages.
-    /// Returns all messages from one Event, or empty vec on timeout.
-    /// Uses a timeout to avoid blocking the select! loop indefinitely.
-    pub async fn recv(&self) -> Result<Vec<HiveMessage>, NetworkError> {
-        // Short timeout so the caller's select! loop can fire timers (heartbeats, etc.)
+    /// Receive next consensus-ordered HiveMessages with Vertex consensus timestamp.
+    /// Returns empty batch on timeout (100ms) to let the caller's select! loop fire timers.
+    pub async fn recv(&self) -> Result<ConsensusEvent, NetworkError> {
         match tokio::time::timeout(
             std::time::Duration::from_millis(100),
             self.recv_inner(),
@@ -107,23 +103,52 @@ impl VertexNode {
         .await
         {
             Ok(result) => result,
-            Err(_) => Ok(vec![]), // timeout — no messages, let caller do other work
+            Err(_) => Ok(ConsensusEvent::empty()),
         }
     }
 
-    async fn recv_inner(&self) -> Result<Vec<HiveMessage>, NetworkError> {
+    async fn recv_inner(&self) -> Result<ConsensusEvent, NetworkError> {
         match self.engine.recv_message().await? {
             Some(Message::Event(event)) => {
+                let consensus_timestamp_ms = event.consensus_at();
+                let event_hash = hex::encode(event.hash());
                 let mut msgs = Vec::new();
                 for tx in event.transactions() {
                     if let Ok(msg) = serde_json::from_slice::<HiveMessage>(tx) {
                         msgs.push(msg);
                     }
                 }
-                Ok(msgs)
+                Ok(ConsensusEvent {
+                    messages: msgs,
+                    consensus_timestamp_ms,
+                    event_hash,
+                })
             }
-            Some(Message::SyncPoint(_)) => Ok(vec![]),
-            None => Ok(vec![]),
+            Some(Message::SyncPoint(_)) => Ok(ConsensusEvent::empty()),
+            None => Ok(ConsensusEvent::empty()),
         }
+    }
+}
+
+/// A batch of messages from a single Vertex consensus event.
+pub struct ConsensusEvent {
+    pub messages: Vec<HiveMessage>,
+    /// Vertex-provided consensus timestamp (same on all nodes for this event).
+    pub consensus_timestamp_ms: u64,
+    /// Vertex event hash (cryptographic, consensus-derived).
+    pub event_hash: String,
+}
+
+impl ConsensusEvent {
+    pub fn empty() -> Self {
+        Self {
+            messages: vec![],
+            consensus_timestamp_ms: 0,
+            event_hash: String::new(),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.messages.is_empty()
     }
 }

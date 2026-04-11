@@ -379,22 +379,21 @@ async fn cmd_run(
             }
 
             result = node.recv() => {
-                let messages = match result {
-                    Ok(msgs) => msgs,
+                let consensus_event = match result {
+                    Ok(ce) => ce,
                     Err(e) => {
                         log("ERROR", agent_name, "RECV_FAILED", &format!("{e}"));
                         continue;
                     }
                 };
 
-                // Empty vec = timeout (normal), not engine close
-                if messages.is_empty() {
+                if consensus_event.is_empty() {
                     continue;
                 }
 
-                for msg in messages {
+                for msg in &consensus_event.messages {
                     handle_message(
-                        &msg,
+                        msg,
                         agent_name,
                         &mut identity,
                         &node,
@@ -402,6 +401,7 @@ async fn cmd_run(
                         &mut fault_detector,
                         &mut jobs,
                         &mut my_load,
+                        consensus_event.consensus_timestamp_ms,
                         &known_keys,
                         &mut poc_log,
                         &event_tx,
@@ -424,6 +424,7 @@ fn handle_message(
     fault_detector: &mut FaultDetector,
     jobs: &mut HashMap<JobId, JobCoordinator>,
     my_load: &mut f64,
+    vertex_consensus_ts: u64,
     known_keys: &HashMap<AgentId, VerifyingKey>,
     poc_log: &mut std::fs::File,
     event_tx: &broadcast::Sender<DashboardEvent>,
@@ -609,7 +610,8 @@ fn handle_message(
                 if let JobState::Assigned(ref assignments) = coord.state {
                     if coord.results.len() >= assignments.len() {
                         // Use the job's creation timestamp — deterministic across all agents
-                        let poc_timestamp = coord.job.created_at_ms;
+                        // Use Vertex consensus timestamp — identical on all nodes
+                        let poc_timestamp = vertex_consensus_ts;
                         let mut sorted_participants: Vec<AgentId> =
                             known_keys.keys().cloned().collect();
                         sorted_participants.sort();
@@ -685,7 +687,7 @@ fn handle_message(
                             poc_timestamp_ms,
                             ..
                         } => (assignments.clone(), *poc_timestamp_ms),
-                        JobState::Assigned(a) => (a.clone(), coord.job.created_at_ms),
+                        JobState::Assigned(a) => (a.clone(), vertex_consensus_ts),
                         _ => return,
                     };
 
