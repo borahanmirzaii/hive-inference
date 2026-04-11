@@ -58,12 +58,25 @@
           addLog('VERTEX', `${event.agent_name} connected (${event.addr})`, getColor(event.agent_id));
           break;
         case 'heartbeat':
-          if (agents[event.agent_id]) {
+          if (!agents[event.agent_id]) {
+            // Auto-discover agents from heartbeats (if we missed agent_connected)
+            const names = ['alpha', 'beta', 'gamma', 'delta', 'epsilon'];
+            const idx = Object.keys(agents).length;
+            agents[event.agent_id] = {
+              name: `agent-${names[idx] || idx}`,
+              addr: '',
+              peers: 4,
+              load: event.load,
+              lastSeen: Date.now(),
+              active: true,
+            };
+            addLog('VERTEX', `${agents[event.agent_id].name} discovered`, getColor(event.agent_id));
+          } else {
             agents[event.agent_id].load = event.load;
             agents[event.agent_id].lastSeen = Date.now();
             agents[event.agent_id].active = true;
-            agents = agents;
           }
+          agents = agents;
           staleAgents.delete(event.agent_id);
           staleAgents = staleAgents;
           break;

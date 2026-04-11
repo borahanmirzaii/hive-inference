@@ -63,10 +63,18 @@ impl VertexNode {
         .await
         .map_err(|_| NetworkError::BindTimeout)??;
 
+        // Tune Vertex for low-latency local swarm coordination
+        let mut options = Options::default();
+        options.set_heartbeat_us(500_000); // 500ms Vertex heartbeat (fast gossip)
+        options.set_target_ack_latency_ms(400); // tighten ack target
+        options.set_max_ack_latency_ms(800); // cap ack latency
+        options.set_enable_dynamic_epoch_size(true); // adapt to swarm size changes
+        options.set_transaction_channel_size(4096); // buffer for burst traffic
+
         let engine = Engine::start(
             &context,
             socket,
-            Options::default(),
+            options,
             secret,
             peer_set,
             false, // not joining a running session

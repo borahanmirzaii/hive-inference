@@ -48,9 +48,9 @@ run_cmd() {
     echo "cd $(pwd) && DYLD_LIBRARY_PATH=$DYLIB_DIR $BINARY run --config $CONFIG_ABS --agent-name $NAME --vertex-secret $VS --ed25519-secret $ES $EXTRA; echo '--- $NAME exited ---'; read"
 }
 
-# Alpha also runs the dashboard WebSocket server on port 3001
+# Alpha also runs the dashboard WebSocket server on port 3030
 tmux new-session -d -s "$SESSION" -n "swarm" \
-    "$(run_cmd agent-alpha "$AGENT_ALPHA_VERTEX_SECRET" "$AGENT_ALPHA_ED25519_SECRET" "--dashboard-port 3001")"
+    "$(run_cmd agent-alpha "$AGENT_ALPHA_VERTEX_SECRET" "$AGENT_ALPHA_ED25519_SECRET" "--dashboard-port 3030")"
 
 tmux split-window -t "$SESSION" -h \
     "$(run_cmd agent-beta "$AGENT_BETA_VERTEX_SECRET" "$AGENT_BETA_ED25519_SECRET")"

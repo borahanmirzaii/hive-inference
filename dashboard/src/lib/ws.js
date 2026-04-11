@@ -2,7 +2,7 @@
 let ws = null;
 let listeners = [];
 
-export function connect(url = 'ws://localhost:3001') {
+export function connect(url = 'ws://localhost:3030') {
   if (ws) ws.close();
 
   ws = new WebSocket(url);
@@ -24,10 +24,22 @@ export function connect(url = 'ws://localhost:3001') {
 
   ws.onmessage = (event) => {
     try {
-      const data = JSON.parse(event.data);
+      // event.data may be a Blob in some browsers
+      const raw = typeof event.data === 'string' ? event.data : null;
+      if (!raw) {
+        // Handle Blob data
+        event.data.text().then((text) => {
+          const data = JSON.parse(text);
+          console.log('[ws] event:', data.type);
+          notify(data);
+        });
+        return;
+      }
+      const data = JSON.parse(raw);
+      console.log('[ws] event:', data.type);
       notify(data);
     } catch (e) {
-      console.error('[ws] parse error:', e);
+      console.error('[ws] parse error:', e, event.data);
     }
   };
 }

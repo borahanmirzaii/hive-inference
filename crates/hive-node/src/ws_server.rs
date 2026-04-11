@@ -119,35 +119,42 @@ async fn handle_connection(
     };
 
     eprintln!("[ws] dashboard connected from {peer}");
-    let (mut ws_tx, mut ws_rx) = ws_stream.split();
+    let (mut ws_tx, ws_rx) = ws_stream.split();
 
-    let send_task = tokio::spawn(async move {
-        loop {
-            match event_rx.recv().await {
-                Ok(event) => {
-                    if let Ok(json) = serde_json::to_string(&event) {
-                        if ws_tx.send(Message::Text(json.into())).await.is_err() {
-                            break;
-                        }
-                    }
-                }
-                Err(broadcast::error::RecvError::Lagged(n)) => {
-                    eprintln!("[ws] {peer} lagged by {n} messages");
-                }
-                Err(broadcast::error::RecvError::Closed) => break,
+    // Keep the receive half alive in background (detects close)
+    let mut recv_handle = tokio::spawn(async move {
+        let mut rx = ws_rx;
+        while let Some(msg) = rx.next().await {
+            match msg {
+                Ok(Message::Close(_)) | Err(_) => break,
+                _ => {} // ignore other client messages
             }
         }
     });
 
-    let recv_task = tokio::spawn(async move {
-        while let Some(Ok(_msg)) = ws_rx.next().await {
-            // Ignore client messages for now
+    // Send events until connection drops or channel closes
+    loop {
+        tokio::select! {
+            result = event_rx.recv() => {
+                match result {
+                    Ok(event) => {
+                        if let Ok(json) = serde_json::to_string(&event) {
+                            if ws_tx.send(Message::Text(json.into())).await.is_err() {
+                                break;
+                            }
+                        }
+                    }
+                    Err(broadcast::error::RecvError::Lagged(n)) => {
+                        eprintln!("[ws] {peer} lagged by {n} messages");
+                    }
+                    Err(broadcast::error::RecvError::Closed) => break,
+                }
+            }
+            _ = &mut recv_handle => {
+                // Client disconnected
+                break;
+            }
         }
-    });
-
-    tokio::select! {
-        _ = send_task => {},
-        _ = recv_task => {},
     }
 
     eprintln!("[ws] {peer} disconnected");

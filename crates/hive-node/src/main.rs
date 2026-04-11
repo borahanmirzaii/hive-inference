@@ -411,6 +411,7 @@ async fn cmd_run(
         }
     }
 
+    #[allow(unreachable_code)]
     Ok(())
 }
 
