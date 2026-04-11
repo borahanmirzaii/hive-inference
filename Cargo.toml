@@ -1,0 +1,3 @@
+[workspace]
+members = ["crates/hive-core", "crates/hive-node"]
+resolver = "2"

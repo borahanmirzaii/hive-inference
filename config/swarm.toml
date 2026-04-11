@@ -1,0 +1,32 @@
+# Hive Inference Swarm Config
+
+[[agent]]
+name = "agent-alpha"
+addr = "127.0.0.1:9000"
+vertex_pubkey = "aSq9DsNNvGhYxYyqA9wd2eduEAZ5AXWgJTbTHmmPgUh37tqXqsEk1Fy4csuHg7AvneKUsueRKdT1ErYtyG4Hd8SV54DM6dHQe7EeWC3hGDgvSYRzCd8xJpu3rNpQ"
+ed25519_pubkey = "ee34cb02d1f23628584a531bda407ec0ea41fbe577dc0b6d47ff34d17c29f2ba"
+
+[[agent]]
+name = "agent-beta"
+addr = "127.0.0.1:9001"
+vertex_pubkey = "aSq9DsNNvGhYxYyqA9wd2eduEAZ5AXWgJTbTJ5cSasPFSu3q4fcx6XZE4maBjzk9QdERXgMsPVfvhCUnjG8Q5XTFQGfgZAMGF9yvCe4yipDACXvnSunYiVhZp4dr"
+ed25519_pubkey = "b432181f2c46e1c9e5b482feb4a3f20e9a2add07e48000415413aa8375929862"
+
+[[agent]]
+name = "agent-gamma"
+addr = "127.0.0.1:9002"
+vertex_pubkey = "aSq9DsNNvGhYxYyqA9wd2eduEAZ5AXWgJTbTJniamXRyiHwVwBz5sJCWHC96KW3WSQNVL3ti9TTQdUVzVH2M36M4wBosNLfbjC8XVUeh5rfTHBR6JBciU3WURLyN"
+ed25519_pubkey = "4dfa2d49d58a163d41234a1a588bbb6735b9954282f685f85f8a66bcdedb3d98"
+
+[[agent]]
+name = "agent-delta"
+addr = "127.0.0.1:9003"
+vertex_pubkey = "aSq9DsNNvGhYxYyqA9wd2eduEAZ5AXWgJTbTG7z2vDxcHHdjW6pdEcRb9fLx4XvxRyp9N9kR4b4NbhXpRWq4WnrT52mxh7ye95gpFzKftLkcyWzZVdkbYyFUcY7V"
+ed25519_pubkey = "19b47dccd88928f00b8f32a7c662256e2407183beca7008d51f61e01615ce60e"
+
+[[agent]]
+name = "agent-epsilon"
+addr = "127.0.0.1:9004"
+vertex_pubkey = "aSq9DsNNvGhYxYyqA9wd2eduEAZ5AXWgJTbTFZkM4jUGrJRVzuEkfGq7FxSZ562pf7CYHRqZamiuWShcEeQFgLVdGbxb3J394KcfFMVoVgMVNHNPjqChur6LTiTC"
+ed25519_pubkey = "68e6968f9255428b29ccf99cb8204939927feb1fe823b000d1323dd89c50ce2a"
+

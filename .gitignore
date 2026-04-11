@@ -1,0 +1,20 @@
+# Reference projects (read-only)
+refs/
+vertex-hackathon-guide/
+
+# Build artifacts
+target/
+
+# Secrets
+config/secrets.env
+
+# PoC log (generated at runtime)
+poc_log.jsonl
+
+# Dashboard build
+dashboard/node_modules/
+dashboard/dist/
+dashboard/.svelte-kit/
+
+# OS
+.DS_Store
