@@ -94,20 +94,8 @@ impl VertexNode {
     }
 
     /// Receive next consensus-ordered HiveMessages with Vertex consensus timestamp.
-    /// Returns empty batch on timeout (100ms) to let the caller's select! loop fire timers.
+    /// This blocks until a message arrives — use inside tokio::select! with other timers.
     pub async fn recv(&self) -> Result<ConsensusEvent, NetworkError> {
-        match tokio::time::timeout(
-            std::time::Duration::from_millis(100),
-            self.recv_inner(),
-        )
-        .await
-        {
-            Ok(result) => result,
-            Err(_) => Ok(ConsensusEvent::empty()),
-        }
-    }
-
-    async fn recv_inner(&self) -> Result<ConsensusEvent, NetworkError> {
         match self.engine.recv_message().await? {
             Some(Message::Event(event)) => {
                 let consensus_timestamp_ms = event.consensus_at();

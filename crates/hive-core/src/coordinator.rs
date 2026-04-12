@@ -6,7 +6,6 @@ use crate::types::*;
 pub enum JobState {
     CollectingBids,
     Assigned(HashMap<ChunkIndex, AgentId>),
-    CollectingResults,
     BuildingPoc {
         assignments: HashMap<ChunkIndex, AgentId>,
         poc_timestamp_ms: u64,
@@ -23,6 +22,7 @@ pub struct JobCoordinator {
     pub poc_sigs: Vec<(AgentId, String)>,
     pub state: JobState,
     pub bid_deadline_ms: u64,
+    resolved: bool, // guard against double-resolution
 }
 
 impl JobCoordinator {
@@ -35,6 +35,7 @@ impl JobCoordinator {
             poc_sigs: vec![],
             state: JobState::CollectingBids,
             bid_deadline_ms: deadline,
+            resolved: false,
         }
     }
 
@@ -45,41 +46,55 @@ impl JobCoordinator {
     }
 
     pub fn receive_result(&mut self, result: SignedEnvelope<ChunkResult>) {
+        // Accept results in any active state (not Complete/Failed)
         match &self.state {
-            JobState::Assigned(_) | JobState::CollectingResults | JobState::BuildingPoc { .. } => {
-                self.results.push(result);
+            JobState::Complete | JobState::Failed(_) | JobState::CollectingBids => {}
+            _ => {
+                // Deduplicate: don't accept same chunk from same agent twice
+                let dominated = self.results.iter().any(|r| {
+                    r.payload.chunk_index == result.payload.chunk_index
+                        && r.payload.agent_id == result.payload.agent_id
+                });
+                if !dominated {
+                    self.results.push(result);
+                }
             }
-            _ => {}
         }
     }
 
     pub fn receive_poc_sig(&mut self, agent_id: AgentId, signature: String) {
-        // Accept sigs in Assigned (results may still be arriving) and BuildingPoc states.
-        // PocContributions can arrive before an agent has processed all ChunkResults.
+        // Accept sigs in ANY active state — PocContributions can arrive
+        // before an agent has processed all ChunkResults (Vertex ordering).
         match &self.state {
-            JobState::Assigned(_) | JobState::BuildingPoc { .. } => {
+            JobState::Complete | JobState::Failed(_) | JobState::CollectingBids => {}
+            _ => {
                 if !self.poc_sigs.iter().any(|(id, _)| id == &agent_id) {
                     self.poc_sigs.push((agent_id, signature));
                 }
             }
-            _ => {}
         }
     }
 
     /// Deterministic assignment — every node computes identically because
     /// Vertex guarantees the same bid ordering on all nodes.
     ///
-    /// For each chunk: pick the bid with highest capacity_score.
-    /// Tie-break: lowest agent_id (deterministic string comparison).
-    /// Fallback: unassigned chunks round-robin to agents with lowest load.
+    /// Returns None if already resolved (guard against double-resolution).
     pub fn resolve_assignments(
         &mut self,
         active_agents: &[AgentId],
-    ) -> HashMap<ChunkIndex, AgentId> {
+    ) -> Option<HashMap<ChunkIndex, AgentId>> {
+        // Guard: only resolve once
+        if self.resolved {
+            return None;
+        }
+        if !matches!(self.state, JobState::CollectingBids) {
+            return None;
+        }
+
+        self.resolved = true;
         let num_chunks = self.job.chunks.len();
         let mut assignments: HashMap<ChunkIndex, AgentId> = HashMap::new();
 
-        // For each chunk, find the best bid
         for chunk_idx in 0..num_chunks {
             let best_bid = self
                 .bids
@@ -98,7 +113,7 @@ impl JobCoordinator {
             }
         }
 
-        // Fallback: unassigned chunks get round-robin'd to active agents
+        // Fallback: unassigned chunks round-robin to sorted active agents
         if !active_agents.is_empty() {
             let mut sorted_active = active_agents.to_vec();
             sorted_active.sort();
@@ -115,15 +130,20 @@ impl JobCoordinator {
         }
 
         self.state = JobState::Assigned(assignments.clone());
-        assignments
+        Some(assignments)
     }
 
-    pub fn all_results_in(&self) -> bool {
+    pub fn get_assignments(&self) -> Option<&HashMap<ChunkIndex, AgentId>> {
         match &self.state {
-            JobState::Assigned(ref assignments) => self.results.len() >= assignments.len(),
-            JobState::BuildingPoc { ref assignments, .. } => {
-                self.results.len() >= assignments.len()
-            }
+            JobState::Assigned(a) => Some(a),
+            JobState::BuildingPoc { assignments, .. } => Some(assignments),
+            _ => None,
+        }
+    }
+
+    pub fn results_complete(&self) -> bool {
+        match &self.state {
+            JobState::Assigned(assignments) => self.results.len() >= assignments.len(),
             _ => false,
         }
     }
@@ -132,23 +152,19 @@ impl JobCoordinator {
         self.job.chunks.len()
     }
 
-    pub fn transition_to_collecting_results(&mut self) {
-        if let JobState::Assigned(_) = &self.state {
-            self.state = JobState::CollectingResults;
-        }
-    }
-
     pub fn transition_to_building_poc(
         &mut self,
         assignments: HashMap<ChunkIndex, AgentId>,
         poc_timestamp_ms: u64,
         poc_hash: String,
     ) {
-        self.state = JobState::BuildingPoc {
-            assignments,
-            poc_timestamp_ms,
-            poc_hash,
-        };
+        if matches!(self.state, JobState::Assigned(_)) {
+            self.state = JobState::BuildingPoc {
+                assignments,
+                poc_timestamp_ms,
+                poc_hash,
+            };
+        }
     }
 
     pub fn transition_to_complete(&mut self) {
@@ -157,6 +173,10 @@ impl JobCoordinator {
 
     pub fn transition_to_failed(&mut self, reason: String) {
         self.state = JobState::Failed(reason);
+    }
+
+    pub fn is_terminal(&self) -> bool {
+        matches!(self.state, JobState::Complete | JobState::Failed(_))
     }
 }
 
@@ -194,7 +214,6 @@ mod tests {
         let mut agent_a = AgentIdentity::generate();
         let mut agent_b = AgentIdentity::generate();
 
-        // A bids higher on chunk 0, B bids higher on chunks 1 and 2
         coord.receive_bid(make_bid(&mut agent_a, "job-test", 0, 0.9));
         coord.receive_bid(make_bid(&mut agent_b, "job-test", 0, 0.5));
         coord.receive_bid(make_bid(&mut agent_a, "job-test", 1, 0.3));
@@ -203,7 +222,7 @@ mod tests {
         coord.receive_bid(make_bid(&mut agent_b, "job-test", 2, 0.7));
 
         let active = vec![agent_a.id.clone(), agent_b.id.clone()];
-        let assignments = coord.resolve_assignments(&active);
+        let assignments = coord.resolve_assignments(&active).unwrap();
 
         assert_eq!(assignments[&0], agent_a.id);
         assert_eq!(assignments[&1], agent_b.id);
@@ -218,14 +237,12 @@ mod tests {
         let mut agent_a = AgentIdentity::generate();
         let mut agent_b = AgentIdentity::generate();
 
-        // Equal scores — tiebreak should pick lower agent_id
         coord.receive_bid(make_bid(&mut agent_a, "job-test", 0, 0.5));
         coord.receive_bid(make_bid(&mut agent_b, "job-test", 0, 0.5));
 
         let active = vec![agent_a.id.clone(), agent_b.id.clone()];
-        let assignments = coord.resolve_assignments(&active);
+        let assignments = coord.resolve_assignments(&active).unwrap();
 
-        // Lower ID wins the tiebreak
         let expected = if agent_a.id < agent_b.id { &agent_a.id } else { &agent_b.id };
         assert_eq!(&assignments[&0], expected);
     }
@@ -236,22 +253,32 @@ mod tests {
         let mut coord = JobCoordinator::new(job, 2000);
 
         let mut agent_a = AgentIdentity::generate();
-
-        // Only bid on chunk 0 — chunks 1 and 2 have no bids
         coord.receive_bid(make_bid(&mut agent_a, "job-test", 0, 0.9));
 
         let active = vec![agent_a.id.clone(), "agent-b".into()];
-        let assignments = coord.resolve_assignments(&active);
+        let assignments = coord.resolve_assignments(&active).unwrap();
 
-        assert_eq!(assignments.len(), 3); // all chunks assigned
-        assert_eq!(assignments[&0], agent_a.id); // bid winner
-        // chunks 1 and 2 assigned via round-robin to sorted active agents
+        assert_eq!(assignments.len(), 3);
+        assert_eq!(assignments[&0], agent_a.id);
         assert!(assignments.contains_key(&1));
         assert!(assignments.contains_key(&2));
     }
 
     #[test]
-    fn accepts_poc_sigs_in_assigned_state() {
+    fn double_resolve_returns_none() {
+        let job = make_job(1);
+        let mut coord = JobCoordinator::new(job, 2000);
+
+        let mut agent = AgentIdentity::generate();
+        coord.receive_bid(make_bid(&mut agent, "job-test", 0, 0.9));
+
+        let active = vec![agent.id.clone()];
+        assert!(coord.resolve_assignments(&active).is_some());
+        assert!(coord.resolve_assignments(&active).is_none()); // second call blocked
+    }
+
+    #[test]
+    fn accepts_poc_sigs_in_any_active_state() {
         let job = make_job(1);
         let mut coord = JobCoordinator::new(job, 2000);
 
@@ -259,8 +286,42 @@ mod tests {
         coord.receive_bid(make_bid(&mut agent, "job-test", 0, 0.9));
         coord.resolve_assignments(&[agent.id.clone()]);
 
-        // Should accept sig even in Assigned state (before BuildingPoc)
-        coord.receive_poc_sig("agent-x".into(), "sig-hex".into());
+        // Assigned state
+        coord.receive_poc_sig("agent-x".into(), "sig-1".into());
         assert_eq!(coord.poc_sigs.len(), 1);
+
+        // BuildingPoc state
+        coord.transition_to_building_poc(HashMap::new(), 1000, "hash".into());
+        coord.receive_poc_sig("agent-y".into(), "sig-2".into());
+        assert_eq!(coord.poc_sigs.len(), 2);
+
+        // Dedup — same agent
+        coord.receive_poc_sig("agent-x".into(), "sig-dup".into());
+        assert_eq!(coord.poc_sigs.len(), 2);
+    }
+
+    #[test]
+    fn deduplicates_results() {
+        let job = make_job(2);
+        let mut coord = JobCoordinator::new(job, 2000);
+        let mut agent = AgentIdentity::generate();
+        coord.receive_bid(make_bid(&mut agent, "job-test", 0, 0.9));
+        coord.resolve_assignments(&[agent.id.clone()]);
+
+        let result = ChunkResult {
+            job_id: "job-test".into(),
+            chunk_index: 0,
+            agent_id: agent.id.clone(),
+            result: "output".into(),
+            result_hash: "hash".into(),
+            processing_ms: 10,
+            timestamp_ms: 2000,
+            nonce: 0,
+        };
+        let env1 = agent.sign(result.clone()).unwrap();
+        let env2 = agent.sign(result).unwrap();
+        coord.receive_result(env1);
+        coord.receive_result(env2);
+        assert_eq!(coord.results.len(), 1); // deduplicated
     }
 }

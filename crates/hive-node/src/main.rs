@@ -307,43 +307,43 @@ async fn cmd_run(
                 let now = now_ms();
                 let job_ids: Vec<JobId> = jobs.keys().cloned().collect();
                 for job_id in job_ids {
-                    let coord = jobs.get_mut(&job_id).unwrap();
-                    if matches!(coord.state, JobState::CollectingBids)
-                        && now >= coord.bid_deadline_ms
-                    {
-                        let mut active: Vec<AgentId> = known_keys.keys().cloned().collect();
-                        active.sort();
-                        let assignments = coord.resolve_assignments(&active);
+                    let Some(coord) = jobs.get_mut(&job_id) else { continue };
+                    if !matches!(coord.state, JobState::CollectingBids) || now < coord.bid_deadline_ms {
+                        continue;
+                    }
 
-                        log("HIVE", agent_name, "ASSIGNED", &format!(
-                            "job={job_id} assignments={}", assignments.len()
-                        ));
+                    let Some(assignments) = coord.resolve_assignments(&sorted_agent_ids) else {
+                        continue; // already resolved
+                    };
 
-                        // Process my assigned chunks
-                        for (&chunk_idx, assigned_agent) in &assignments {
-                            if assigned_agent == &identity.id && chunk_idx < coord.job.chunks.len() {
-                                let chunk_text = &coord.job.chunks[chunk_idx];
-                                let output = inference::process_chunk(chunk_text);
-                                my_load = (my_load + 0.2_f64).min(1.0);
+                    log("HIVE", agent_name, "ASSIGNED", &format!(
+                        "job={job_id} assignments={}", assignments.len()
+                    ));
 
-                                log("HIVE", agent_name, "CHUNK_DONE", &format!(
-                                    "job={job_id} chunk={chunk_idx} ms={} hash={}...",
-                                    output.processing_ms, &output.result_hash[..8]
-                                ));
+                    // Process my assigned chunks
+                    for (&chunk_idx, assigned_agent) in &assignments {
+                        if assigned_agent == &identity.id && chunk_idx < coord.job.chunks.len() {
+                            let chunk_text = &coord.job.chunks[chunk_idx];
+                            let output = inference::process_chunk(chunk_text);
+                            my_load = (my_load + 0.2).min(1.0);
 
-                                let result = ChunkResult {
-                                    job_id: job_id.clone(),
-                                    chunk_index: chunk_idx,
-                                    agent_id: identity.id.clone(),
-                                    result: output.result,
-                                    result_hash: output.result_hash,
-                                    processing_ms: output.processing_ms,
-                                    timestamp_ms: now_ms(),
-                                    nonce: 0,
-                                };
-                                if let Ok(env) = identity.sign(result) {
-                                    let _ = node.broadcast(&HiveMessage::ChunkResult(env));
-                                }
+                            log("HIVE", agent_name, "CHUNK_DONE", &format!(
+                                "job={job_id} chunk={chunk_idx} ms={} hash={}...",
+                                output.processing_ms, &output.result_hash[..8]
+                            ));
+
+                            let result = ChunkResult {
+                                job_id: job_id.clone(),
+                                chunk_index: chunk_idx,
+                                agent_id: identity.id.clone(),
+                                result: output.result,
+                                result_hash: output.result_hash,
+                                processing_ms: output.processing_ms,
+                                timestamp_ms: now_ms(),
+                                nonce: 0,
+                            };
+                            if let Ok(env) = identity.sign(result) {
+                                let _ = node.broadcast(&HiveMessage::ChunkResult(env));
                             }
                         }
                     }
@@ -535,45 +535,10 @@ fn handle_message(
                 return;
             }
 
+            // Just store the bid — assignment happens in bid_deadline_interval only
             let job_id = &envelope.payload.job_id;
             if let Some(coord) = jobs.get_mut(job_id) {
                 coord.receive_bid(envelope.clone());
-
-                let now = now_ms();
-                if now >= coord.bid_deadline_ms && matches!(coord.state, JobState::CollectingBids) {
-                    let active: Vec<AgentId> = known_keys.keys().cloned().collect();
-                    let assignments = coord.resolve_assignments(&active);
-
-                    log("HIVE", agent_name, "ASSIGNED", &format!("job={job_id} assignments={}", assignments.len()));
-
-                    // Process my assigned chunks
-                    for (&chunk_idx, assigned_agent) in &assignments {
-                        if assigned_agent == &identity.id && chunk_idx < coord.job.chunks.len() {
-                            let chunk_text = &coord.job.chunks[chunk_idx];
-                            let output = inference::process_chunk(chunk_text);
-                            *my_load = (*my_load + 0.2_f64).min(1.0);
-
-                            log("HIVE", agent_name, "CHUNK_DONE", &format!(
-                                "job={job_id} chunk={chunk_idx} ms={} hash={}...",
-                                output.processing_ms, &output.result_hash[..8]
-                            ));
-
-                            let result = ChunkResult {
-                                job_id: job_id.clone(),
-                                chunk_index: chunk_idx,
-                                agent_id: identity.id.clone(),
-                                result: output.result,
-                                result_hash: output.result_hash,
-                                processing_ms: output.processing_ms,
-                                timestamp_ms: now_ms(),
-                                nonce: 0,
-                            };
-                            if let Ok(env) = identity.sign(result) {
-                                let _ = node.broadcast(&HiveMessage::ChunkResult(env));
-                            }
-                        }
-                    }
-                }
             }
         }
 
