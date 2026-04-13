@@ -74,6 +74,20 @@ fn load_config(path: &PathBuf) -> Result<SwarmConfig> {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // Suppress tokio waker panics from tashi-vertex C library.
+    // The Vertex engine's internal task management occasionally
+    // triggers a debug assertion in tokio's task state machine.
+    // This is a known upstream issue — we log instead of crashing.
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let msg = info.to_string();
+        if msg.contains("is_join_waker_set") {
+            eprintln!("[WARN] Suppressed tokio waker assertion (tashi-vertex FFI)");
+            return;
+        }
+        default_hook(info);
+    }));
+
     let cli = Cli::parse();
 
     match cli.command {

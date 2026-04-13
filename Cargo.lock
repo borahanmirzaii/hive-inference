@@ -798,7 +798,7 @@ dependencies = [
 [[package]]
 name = "tashi-vertex"
 version = "0.13.0"
-source = "git+https://github.com/tashigit/tashi-vertex-rs.git#33ecba9aedce422caf628c4733f38953a92a9ab2"
+source = "git+https://github.com/borahanmirzaii/tashi-vertex-rs.git?branch=fix%2Fmessage-recv-drop-safety#84e6b12e99c43e322b463392bc958f3032207816"
 dependencies = [
  "anyhow",
  "cmake",
@@ -827,9 +827,9 @@ dependencies = [
 
 [[package]]
 name = "tokio"
-version = "1.51.1"
+version = "1.49.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f66bf9585cda4b724d3e78ab34b73fb2bbaba9011b9bfdf69dc836382ea13b8c"
+checksum = "72a2903cd7736441aac9df9d7688bd0ce48edccaadf181c3b90be801e81d3d86"
 dependencies = [
  "bytes",
  "libc",
@@ -844,9 +844,9 @@ dependencies = [
 
 [[package]]
 name = "tokio-macros"
-version = "2.7.0"
+version = "2.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "385a6cb71ab9ab790c5fe8d67f1645e6c450a7ce006a33de03daa956cf70a496"
+checksum = "5c55a2eff8b69ce66c84f85e1da1c233edc36ceb85a2058d11b0d6a3c7e7569c"
 dependencies = [
  "proc-macro2",
  "quote",

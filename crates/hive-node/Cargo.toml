@@ -9,11 +9,11 @@ path = "src/main.rs"
 
 [dependencies]
 hive-core = { path = "../hive-core" }
-tashi-vertex = { git = "https://github.com/tashigit/tashi-vertex-rs.git" }
+tashi-vertex = { git = "https://github.com/borahanmirzaii/tashi-vertex-rs.git", branch = "fix/message-recv-drop-safety" }
 ed25519-dalek = { version = "2", features = ["rand_core", "serde"] }
 hex = "0.4"
 rand = "0.8"
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "=1.49.0", features = ["full"] }
 tokio-tungstenite = "0.24"
 futures-util = "0.3"
 clap = { version = "4", features = ["derive"] }

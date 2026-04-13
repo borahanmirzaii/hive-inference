@@ -1,3 +1,4 @@
 [workspace]
 members = ["crates/hive-core", "crates/hive-node"]
+exclude = ["refs/tashi-vertex-rs", "refs/nexus-agentic-commerce", "refs/warmup-vertex-rust"]
 resolver = "2"
