@@ -510,6 +510,62 @@
       color: var(--accent-3);
     }
 
+    /* ---- Gallery ---- */
+    .gallery-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 20px;
+      margin-top: 48px;
+    }
+    .gallery-item {
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      transition: all 0.3s;
+      cursor: pointer;
+      position: relative;
+    }
+    .gallery-item:hover {
+      border-color: var(--accent-1);
+      transform: translateY(-4px);
+      box-shadow: 0 12px 40px rgba(99, 102, 241, 0.15);
+    }
+    .gallery-item img {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+    .gallery-item .gallery-label {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      padding: 12px 16px;
+      background: linear-gradient(transparent, rgba(6, 9, 24, 0.9));
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+    }
+    /* Lightbox */
+    .lightbox {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 200;
+      background: rgba(6, 9, 24, 0.95);
+      backdrop-filter: blur(20px);
+      align-items: center;
+      justify-content: center;
+      cursor: zoom-out;
+    }
+    .lightbox.active { display: flex; }
+    .lightbox img {
+      max-width: 90vw;
+      max-height: 90vh;
+      border-radius: 12px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    }
+
     /* ---- CTA ---- */
     .cta-section {
       text-align: center;
@@ -609,6 +665,7 @@
       <a href="#features">Features</a>
       <a href="#architecture">Architecture</a>
       <a href="#demo">Demo</a>
+      <a href="#gallery">Slides</a>
     </div>
     <span class="nav-badge">Vertex Swarm 2026</span>
   </nav>
@@ -952,6 +1009,52 @@
     </table>
   </section>
 
+  <!-- GALLERY -->
+  <section id="gallery" class="section-pad reveal">
+    <div class="section-label">Presentation</div>
+    <h2 class="section-title">Project Slides</h2>
+    <p class="section-desc">Visual walkthrough of the Hive Inference system.</p>
+    <div class="gallery-grid">
+      <div class="gallery-item" onclick="openLightbox(this)">
+        <img src="01-title.png" alt="Title Slide" loading="lazy"/>
+        <div class="gallery-label">Title</div>
+      </div>
+      <div class="gallery-item" onclick="openLightbox(this)">
+        <img src="02-problem.png" alt="Problem & Solution" loading="lazy"/>
+        <div class="gallery-label">Problem & Solution</div>
+      </div>
+      <div class="gallery-item" onclick="openLightbox(this)">
+        <img src="03-architecture.png" alt="Architecture" loading="lazy"/>
+        <div class="gallery-label">Architecture</div>
+      </div>
+      <div class="gallery-item" onclick="openLightbox(this)">
+        <img src="04-pipeline.png" alt="Pipeline" loading="lazy"/>
+        <div class="gallery-label">How It Works</div>
+      </div>
+      <div class="gallery-item" onclick="openLightbox(this)">
+        <img src="05-features.png" alt="Features" loading="lazy"/>
+        <div class="gallery-label">Features</div>
+      </div>
+      <div class="gallery-item" onclick="openLightbox(this)">
+        <img src="06-demo.png" alt="Demo" loading="lazy"/>
+        <div class="gallery-label">Live Demo</div>
+      </div>
+      <div class="gallery-item" onclick="openLightbox(this)">
+        <img src="07-security.png" alt="Security" loading="lazy"/>
+        <div class="gallery-label">Security</div>
+      </div>
+      <div class="gallery-item" onclick="openLightbox(this)">
+        <img src="08-closing.png" alt="Closing" loading="lazy"/>
+        <div class="gallery-label">Closing</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- LIGHTBOX -->
+  <div class="lightbox" id="lightbox" onclick="closeLightbox()">
+    <img id="lightbox-img" src="" alt=""/>
+  </div>
+
   <!-- CTA -->
   <section class="cta-section reveal">
     <h2>Send it to the <span style="background: linear-gradient(135deg, var(--accent-1), var(--accent-2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">swarm</span>,<br>not the cloud.</h2>
@@ -990,6 +1093,17 @@
       p.style.background = colors[Math.floor(Math.random() * colors.length)];
       container.appendChild(p);
     }
+
+    // Lightbox
+    function openLightbox(el) {
+      const src = el.querySelector('img').src;
+      document.getElementById('lightbox-img').src = src;
+      document.getElementById('lightbox').classList.add('active');
+    }
+    function closeLightbox() {
+      document.getElementById('lightbox').classList.remove('active');
+    }
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLightbox(); });
 
     // Smooth nav links
     document.querySelectorAll('nav a[href^="#"]').forEach(a => {
